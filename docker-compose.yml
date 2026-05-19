@@ -1,4 +1,52 @@
 services:
+  backend:
+    image: eiae:latest
+    container_name: "eiae"
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    environment:
+      PORT: ${PORT}
+      POSTGRES_HOST: ${POSTGRES_HOST}
+      POSTGRES_PORT: ${POSTGRES_PORT}
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      REDIS_HOST: ${REDIS_HOST}
+      REDIS_PORT: ${REDIS_PORT}
+    ports:
+      - ${PORT}:${PORT}
+    hostname: "eiae-${HOSTNAME}"
+    restart: "no"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:${PORT}/healthz"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  frontend:
+    image: emissions-dashboard:latest
+    container_name: emissions_dashboard
+    build:
+      context: ./frontend/monitoring-dashboard
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_BASE: http://localhost:${PORT}/v1
+    environment:
+      PORT: ${FRONTEND_PORT:-5123}
+      HOSTNAME: "0.0.0.0"
+    ports:
+      - "${FRONTEND_PORT:-5123}:${FRONTEND_PORT:-5123}"
+    restart: "no"
+    depends_on:
+      backend:
+        condition: service_healthy
+
   postgres:
     image: postgres:16-alpine
     container_name: emissions_postgres

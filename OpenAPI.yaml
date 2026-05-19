@@ -1,0 +1,896 @@
+openapi: 3.0.3
+info:
+  title: EIAE -- Emissions Ingestion and Analysis Engine
+  version: 1.0.0
+  description: |
+    REST API for a multi-tenant emissions monitoring platform.
+    Manages organizations, sites, assets, emission readings, rollup aggregates,
+    policies, and violation detection.
+
+servers:
+  - url: http://localhost:{port}/v1
+    variables:
+      port:
+        default: "8080"
+
+paths:
+  # ── Organizations ──────────────────────────────────────────────────────
+  /orgs:
+    get:
+      operationId: listOrganizations
+      tags: [Organizations]
+      summary: List all organizations
+      parameters:
+        - $ref: "#/components/parameters/limit"
+        - $ref: "#/components/parameters/offset"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Organization"
+                  total:
+                    type: integer
+    post:
+      operationId: createOrganization
+      tags: [Organizations]
+      summary: Create an organization
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, email]
+              properties:
+                name:
+                  type: string
+                email:
+                  type: string
+                  format: email
+                description:
+                  type: string
+                office_location:
+                  type: string
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Organization"
+
+  /orgs/{org_id}:
+    get:
+      operationId: getOrganization
+      tags: [Organizations]
+      summary: Get a single organization
+      parameters:
+        - $ref: "#/components/parameters/org_id"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Organization"
+
+  /orgs/{org_id}/summary:
+    get:
+      operationId: getOrganizationSummary
+      tags: [Organizations]
+      summary: Dashboard summary (site count, asset count, last rollup)
+      parameters:
+        - $ref: "#/components/parameters/org_id"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OrgSummary"
+
+  # ── Sites ──────────────────────────────────────────────────────────────
+  /orgs/{org_id}/sites:
+    get:
+      operationId: listSites
+      tags: [Sites]
+      summary: List sites for an organization
+      parameters:
+        - $ref: "#/components/parameters/org_id"
+        - $ref: "#/components/parameters/limit"
+        - $ref: "#/components/parameters/offset"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Site"
+                  total:
+                    type: integer
+    post:
+      operationId: createSite
+      tags: [Sites]
+      summary: Create a site
+      parameters:
+        - $ref: "#/components/parameters/org_id"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name:
+                  type: string
+                location:
+                  type: string
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Site"
+
+  # ── Asset Types ────────────────────────────────────────────────────────
+  /asset-types:
+    get:
+      operationId: listAssetTypes
+      tags: [Asset Types]
+      summary: List all asset types
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/AssetType"
+    post:
+      operationId: createAssetType
+      tags: [Asset Types]
+      summary: Create an asset type
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name:
+                  type: string
+                description:
+                  type: string
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AssetType"
+
+  # ── Assets ─────────────────────────────────────────────────────────────
+  /orgs/{org_id}/sites/{site_id}/assets:
+    get:
+      operationId: listAssets
+      tags: [Assets]
+      summary: List assets at a site
+      parameters:
+        - $ref: "#/components/parameters/org_id"
+        - $ref: "#/components/parameters/site_id"
+        - $ref: "#/components/parameters/limit"
+        - $ref: "#/components/parameters/offset"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Asset"
+                  total:
+                    type: integer
+    post:
+      operationId: createAsset
+      tags: [Assets]
+      summary: Create an asset
+      parameters:
+        - $ref: "#/components/parameters/org_id"
+        - $ref: "#/components/parameters/site_id"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name:
+                  type: string
+                asset_type_id:
+                  type: string
+                  format: uuid
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Asset"
+
+  # ── Recorder Devices ───────────────────────────────────────────────────
+  /devices:
+    post:
+      operationId: createRecorderDevice
+      tags: [Recorder Devices]
+      summary: Create a recorder device
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [type]
+              properties:
+                type:
+                  type: string
+                  enum: [field_device, sensor, satellite]
+                org_id:
+                  type: string
+                  format: uuid
+                device_metadata:
+                  type: object
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RecorderDevice"
+
+  /orgs/{org_id}/devices:
+    get:
+      operationId: listOrgDevices
+      tags: [Recorder Devices]
+      summary: List recorder devices for an organization (sensors + satellites)
+      parameters:
+        - $ref: "#/components/parameters/org_id"
+        - $ref: "#/components/parameters/limit"
+        - $ref: "#/components/parameters/offset"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/RecorderDevice"
+
+  /devices/field:
+    get:
+      operationId: listFieldDevices
+      tags: [Recorder Devices]
+      summary: List all field devices (not org-scoped)
+      parameters:
+        - $ref: "#/components/parameters/limit"
+        - $ref: "#/components/parameters/offset"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/RecorderDevice"
+
+  # ── Readings (Ingest) ─────────────────────────────────────────────────
+  /orgs/{org_id}/sites/{site_id}/readings:
+    post:
+      operationId: ingestReadings
+      tags: [Readings]
+      summary: Batch-insert emission readings
+      parameters:
+        - $ref: "#/components/parameters/org_id"
+        - $ref: "#/components/parameters/site_id"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [readings]
+              properties:
+                readings:
+                  type: array
+                  items:
+                    type: object
+                    required: [asset_id, recorder_device_id, reading, recorded_at]
+                    properties:
+                      asset_id:
+                        type: string
+                        format: uuid
+                      recorder_device_id:
+                        type: string
+                        format: uuid
+                      reading:
+                        type: number
+                      unit:
+                        type: string
+                        default: kg_co2e
+                      recorded_at:
+                        type: string
+                        format: date-time
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  batch_id:
+                    type: string
+                    format: uuid
+                  count:
+                    type: integer
+
+  # ── Emissions (Rollups) ────────────────────────────────────────────────
+  /orgs/{org_id}/emissions/trend:
+    get:
+      operationId: getEmissionTrend
+      tags: [Emissions]
+      summary: Get emission rollup trend for an entity
+      parameters:
+        - $ref: "#/components/parameters/org_id"
+        - name: entity_type
+          in: query
+          required: true
+          schema:
+            type: string
+            enum: [org, site, asset]
+        - name: entity_id
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: grain
+          in: query
+          required: true
+          schema:
+            type: string
+            enum: [hour, day, month]
+        - name: from
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date-time
+        - name: to
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date-time
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/EmissionRollup"
+
+  /orgs/{org_id}/emissions/total:
+    get:
+      operationId: getEmissionTotal
+      tags: [Emissions]
+      summary: Get lifetime emission total for an entity
+      parameters:
+        - $ref: "#/components/parameters/org_id"
+        - name: entity_type
+          in: query
+          required: true
+          schema:
+            type: string
+            enum: [org, site, asset]
+        - name: entity_id
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EmissionTotalToDate"
+
+  /emissions/refresh:
+    post:
+      operationId: refreshEmissions
+      tags: [Emissions]
+      summary: Trigger a manual rollup + violation scan
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                window:
+                  type: string
+                  default: "48 hours"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+
+  # ── Policies ───────────────────────────────────────────────────────────
+  /orgs/{org_id}/policies:
+    get:
+      operationId: listPolicies
+      tags: [Policies]
+      summary: List emission policies for an organization
+      parameters:
+        - $ref: "#/components/parameters/org_id"
+        - name: active_only
+          in: query
+          schema:
+            type: boolean
+            default: true
+        - $ref: "#/components/parameters/limit"
+        - $ref: "#/components/parameters/offset"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/EmissionPolicy"
+                  total:
+                    type: integer
+    post:
+      operationId: createPolicy
+      tags: [Policies]
+      summary: Create an emission policy
+      parameters:
+        - $ref: "#/components/parameters/org_id"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [entity_type, entity_id, emission_limit, period]
+              properties:
+                entity_type:
+                  type: string
+                  enum: [org, site, asset]
+                entity_id:
+                  type: string
+                  format: uuid
+                emission_limit:
+                  type: number
+                unit:
+                  type: string
+                  default: kg_co2e
+                period:
+                  type: string
+                  enum: [hour, day, month]
+                effective_from:
+                  type: string
+                  format: date-time
+      responses:
+        "201":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EmissionPolicy"
+
+  /policies/{policy_id}/retire:
+    post:
+      operationId: retirePolicy
+      tags: [Policies]
+      summary: Retire an emission policy (set effective_to)
+      parameters:
+        - name: policy_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                effective_to:
+                  type: string
+                  format: date-time
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+
+  # ── Violations ─────────────────────────────────────────────────────────
+  /orgs/{org_id}/violations:
+    get:
+      operationId: listViolations
+      tags: [Violations]
+      summary: List violations for an organization
+      parameters:
+        - $ref: "#/components/parameters/org_id"
+        - name: open_only
+          in: query
+          schema:
+            type: boolean
+            default: true
+        - $ref: "#/components/parameters/limit"
+        - $ref: "#/components/parameters/offset"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/EmissionViolation"
+                  total:
+                    type: integer
+
+  /violations/{violation_id}/acknowledge:
+    post:
+      operationId: acknowledgeViolation
+      tags: [Violations]
+      summary: Acknowledge a violation
+      parameters:
+        - name: violation_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+
+components:
+  parameters:
+    org_id:
+      name: org_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    site_id:
+      name: site_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    limit:
+      name: limit
+      in: query
+      schema:
+        type: integer
+        default: 50
+        maximum: 200
+    offset:
+      name: offset
+      in: query
+      schema:
+        type: integer
+        default: 0
+
+  schemas:
+    Organization:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        description:
+          type: string
+          nullable: true
+        office_location:
+          type: string
+          nullable: true
+        email:
+          type: string
+          format: email
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    OrgSummary:
+      type: object
+      properties:
+        org_id:
+          type: string
+          format: uuid
+        site_count:
+          type: integer
+        asset_count:
+          type: integer
+        last_update:
+          type: string
+          format: date-time
+          nullable: true
+
+    Site:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        org_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        location:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    AssetType:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        description:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    Asset:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        org_id:
+          type: string
+          format: uuid
+        site_id:
+          type: string
+          format: uuid
+        asset_type_id:
+          type: string
+          format: uuid
+          nullable: true
+        name:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    RecorderDevice:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        org_id:
+          type: string
+          format: uuid
+          nullable: true
+        type:
+          type: string
+          enum: [field_device, sensor, satellite]
+        device_metadata:
+          type: object
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    EmissionRollup:
+      type: object
+      properties:
+        entity_type:
+          type: string
+          enum: [org, site, asset]
+        entity_id:
+          type: string
+          format: uuid
+        bucket_start:
+          type: string
+          format: date-time
+        total_emission:
+          type: number
+        reading_count:
+          type: integer
+        min_reading:
+          type: number
+        max_reading:
+          type: number
+        unit:
+          type: string
+        computed_at:
+          type: string
+          format: date-time
+
+    EmissionTotalToDate:
+      type: object
+      properties:
+        entity_type:
+          type: string
+        entity_id:
+          type: string
+          format: uuid
+        total_to_date:
+          type: number
+        reading_count:
+          type: integer
+        as_of:
+          type: string
+          format: date-time
+
+    EmissionPolicy:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        org_id:
+          type: string
+          format: uuid
+        entity_type:
+          type: string
+          enum: [org, site, asset]
+        entity_id:
+          type: string
+          format: uuid
+        emission_limit:
+          type: number
+        unit:
+          type: string
+        period:
+          type: string
+          enum: [hour, day, month, year]
+        effective_from:
+          type: string
+          format: date-time
+        effective_to:
+          type: string
+          format: date-time
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+
+    EmissionViolation:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        org_id:
+          type: string
+          format: uuid
+        entity_type:
+          type: string
+          enum: [org, site, asset]
+        entity_id:
+          type: string
+          format: uuid
+        policy_id:
+          type: string
+          format: uuid
+        period:
+          type: string
+        limit_value:
+          type: number
+        unit:
+          type: string
+        period_start:
+          type: string
+          format: date-time
+        measured_value:
+          type: number
+        overage:
+          type: number
+        detected_at:
+          type: string
+          format: date-time
+        last_evaluated_at:
+          type: string
+          format: date-time
+        acknowledged_at:
+          type: string
+          format: date-time
+          nullable: true
